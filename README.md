@@ -5,5 +5,6 @@ bash <(wget -qO- https://github.com/UtopiaLee/npsautoinstall/releases/download/1
 ```
 
 
-<img width="358" alt="image" src="https://github.com/UtopiaLee/npsautoinstall/assets/59011698/62a2b375-72a6-4c99-8e68-43c98cfe7e36">
+<img width="366" alt="image" src="https://github.com/UtopiaLee/npsautoinstall/assets/59011698/7886bb5b-5ec9-46e4-bb95-4d081322373a">
+
 
