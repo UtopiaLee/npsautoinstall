@@ -17,8 +17,10 @@ InstallNginx(){
     case $os in
         "ubuntu" | "debian")
             # 在 Ubuntu 和 Debian 上安装 Nginx 的代码
+			
             sudo apt-get update
             sudo apt-get install -y nginx
+			sudo apt install lsof socat cron 
             ;;
         "centos" | "rhel" | "fedora")
             # 在 CentOS、RHEL 和 Fedora 上安装 Nginx 的代码
@@ -160,7 +162,8 @@ ApplyStandAlone(){
 	 
 	 read -r -p "请输入你的域名:" userdoamin
 	  # 使用ping获取主机IP地址
-      ip_address=$(ping -c 1 "$userdoamin" | grep -oP '\(\K[^\)]+')
+      ip_address=$(ping -c 1 "${userdoamin}" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+	  basedomain=$userdoamin
 
      # 获取当前服务器IP地址
      ip_now=$(curl -s ifconfig.me)
@@ -178,6 +181,8 @@ ApplyStandAlone(){
 	    mkdir /usr/tls
         kill80
 	    ~/.acme.sh/acme.sh --issue -d $userdoamin --standalone
+		find ~/.acme.sh/ -name "${userdoamin}_ecc" -type d -exec cp -r {} /usr/tls/ \;
+		AddNginxAlone
       fi
     else
       echo "无法获取目标主机的IP地址。"
@@ -300,6 +305,149 @@ echo "一条龙服务默认配置访问的是443端口，以及http会自动定�
  nginx
 }
 
+AddNginxAlone(){
+    basedomain=${basedomain:-443}
+	read -p "请输入你要代理的端口:" httpport
+	httpport=${httpport:-8010}
+	mkdir -p /etc/nginx/conf.d/
+    touch /etc/nginx/conf.d/${basedomain}.conf
+    echo "server {
+    listen 443 ssl;
+    server_name ${basedomain};
+	client_max_body_size 20M;
+    ssl_certificate  /usr/tls/${basedomain}_ecc/${basedomain}.cer;
+    ssl_certificate_key /usr/tls/${basedomain}_ecc/${basedomain}.key;
+    ssl_session_timeout 5m;
+    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE:ECDH:AES:HIGH:!NULL:!aNULL:!MD5:!ADH:!RC4;
+    ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+    ssl_prefer_server_ciphers on;
+    location / {
+        proxy_set_header Host  \$http_host;
+        proxy_pass http://127.0.0.1:${httpport};
+	    proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 30s;
+	    proxy_set_header  Upgrade  \$http_upgrade;
+        proxy_set_header  Connection \"\$connection_upgrade\";
+    }
+     
+}
+map \$http_upgrade \$connection_upgrade {
+    default upgrade;
+    '' close;
+}" > /etc/nginx/conf.d/${basedomain}.conf
+echo "Successed"
+ nginx -s reload
+}
+
+
+applyByhandHttps(){
+    read -p "请输入你的域名:" basedomain
+    basedomain=${basedomain:-443}
+	read -p "请输入你要代理的端口:" httpport
+	httpport=${httpport:-8010}
+	mkdir -p /etc/nginx/conf.d/
+    touch /etc/nginx/conf.d/${basedomain}.conf
+    echo "server {
+    listen 443 ssl;
+    server_name ${basedomain};
+	client_max_body_size 20M;
+    ssl_certificate  /usr/tls/${basedomain}_ecc/${basedomain}.cer;
+    ssl_certificate_key /usr/tls/${basedomain}_ecc/${basedomain}.key;
+    ssl_session_timeout 5m;
+    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE:ECDH:AES:HIGH:!NULL:!aNULL:!MD5:!ADH:!RC4;
+    ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+    ssl_prefer_server_ciphers on;
+    location / {
+        proxy_set_header Host  \$http_host;
+        proxy_pass http://127.0.0.1:${httpport};
+	    proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 30s;
+	    proxy_set_header  Upgrade  \$http_upgrade;
+        proxy_set_header  Connection \"\$connection_upgrade\";
+    }
+     
+}
+map \$http_upgrade \$connection_upgrade {
+    default upgrade;
+    '' close;
+}" > /etc/nginx/conf.d/${basedomain}.conf
+
+ echo "server {
+    listen       80;
+    server_name  0.0.0.0;
+    server_name [::];
+    server_name _;
+
+    location / {
+         rewrite ^(.*)$ https://${host}$1 permanent;
+    }
+
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   /usr/share/nginx/html;
+    }
+}">/etc/nginx/conf.d/default.conf
+
+echo "Successed"
+ nginx -s reload
+
+}
+
+applyByhandHttpsFan(){
+    read -p "请输入你的泛域名:" basedomain
+    basedomain=${basedomain:-443}
+	read -p "请输入你要代理的端口:" httpport
+	httpport=${httpport:-8010}
+	mkdir -p /etc/nginx/conf.d/
+    touch /etc/nginx/conf.d/${basedomain}.conf
+    echo "server {
+    listen 443 ssl;
+    server_name ${basedomain};
+	client_max_body_size 20M;
+    ssl_certificate  /usr/tls/*.${basedomain}_ecc/*.${basedomain}.cer;
+    ssl_certificate_key /usr/tls/*.${basedomain}_ecc/*.${basedomain}.key;
+    ssl_session_timeout 5m;
+    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE:ECDH:AES:HIGH:!NULL:!aNULL:!MD5:!ADH:!RC4;
+    ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+    ssl_prefer_server_ciphers on;
+    location / {
+        proxy_set_header Host  \$http_host;
+        proxy_pass http://127.0.0.1:${httpport};
+	    proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 30s;
+	    proxy_set_header  Upgrade  \$http_upgrade;
+        proxy_set_header  Connection \"\$connection_upgrade\";
+    }
+     
+}
+map \$http_upgrade \$connection_upgrade {
+    default upgrade;
+    '' close;
+}" > /etc/nginx/conf.d/${basedomain}.conf
+
+ echo "server {
+    listen       80;
+    server_name  0.0.0.0;
+    server_name [::];
+    server_name _;
+
+    location / {
+         rewrite ^(.*)$ https://${host}$1 permanent;
+    }
+
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   /usr/share/nginx/html;
+    }
+}">/etc/nginx/conf.d/default.conf
+
+echo "Successed"
+ nginx -s reload
+
+}
 Menu(){
  status=true
  while $status;do
@@ -312,6 +460,8 @@ Menu(){
    echo -e  "4.申请泛域名证书(dns修改所有权模式)\n"
    echo -e  "5.一键申请泛域名证书并且部署到Nginx反代Nps\n "
    echo -e  "6.卸载Nps \n"
+   echo -e  "7.手动配置HtppsToNginx \n"
+    echo -e  "8.手动配置HtppsToNginx(泛域名) \n"
    echo -e  "0.退出脚本 \033[0;37m\n"
    read -r -p "请选择:" userinput
    case "$userinput" in 
@@ -333,6 +483,12 @@ Menu(){
 		  "6")
 		  echo "开始卸载Nps"
 		  uninstallNps
+		  ;;
+		  "7")
+		  applyByhandHttps
+		  ;;
+		  "8")
+		  applyByhandHttpsFan
 		  ;;
 		  "0")
 		  echo "exit 脚本"
