@@ -161,31 +161,34 @@ ApplyStandAlone(){
 	  ~/.acme.sh/acme.sh --register-account -m $randommail
 	 
 	 read -r -p "请输入你的域名:" userdoamin
-	  # 使用ping获取主机IP地址
-      ip_address=$(ping -c 1 "${userdoamin}" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+	  # 仅获取域名的 IPv4 解析地址
+      ip_address=$(nslookup -type=A "${userdoamin}" | awk '
+        /^Name:/ {found=1}
+        found && /^Address: / {print $2; exit}
+      ')
 	  basedomain=$userdoamin
 
      # 获取当前服务器IP地址
-     ip_now=$(curl -s ifconfig.me)
+     ip_now=$(curl -4 -s ifconfig.me | tr -d '\r\n')
 	 # 显示获取到的IP地址
-    if [ -n "$ip_address" ]; then
+    if [ -n "$ip_address" ] && [ -n "$ip_now" ]; then
       echo -e "\033[0;33m域名解析IP是: $ip_address，当前服务器IP是: $ip_now\033[0;37m"
 
-     # 检查解析的IP是否与当前服务器IP一致
+     # 检查解析的IP是否与当前服务器IPv4一致
      if [ "$ip_address" != "$ip_now" ]; then
         echo -e "\033[0;33m解析域名不一致，请修改DNS解析\033[0;37m"
         return
       else
         echo -e "\033[0;32m解析域名一致\033[0;37m"
 		echo "创建tls存放目录"
-	    mkdir /usr/tls
+	    mkdir -p /usr/tls
         kill80
 	    ~/.acme.sh/acme.sh --issue -d $userdoamin --standalone
 		find ~/.acme.sh/ -name "${userdoamin}_ecc" -type d -exec cp -r {} /usr/tls/ \;
 		AddNginxAlone
       fi
     else
-      echo "无法获取目标主机的IP地址。"
+      echo "无法获取目标主机的IPv4地址。"
 	  Menu
    fi
 }
